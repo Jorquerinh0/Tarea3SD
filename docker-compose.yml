@@ -1,0 +1,100 @@
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    hostname: namenode
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=test
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+      - HDFS_NAMENODE_OPTS=-Dhadoop.security.logger=INFO,RFAS -Ddfs.namenode.rpc-bind-host=0.0.0.0 -Ddfs.namenode.servicerpc-bind-host=0.0.0.0 -Ddfs.namenode.http-bind-host=0.0.0.0
+    ports:
+      - "9870:9870"
+      - "8020:8020"
+    networks:
+      - hadoop
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    hostname: datanode
+    depends_on:
+      - namenode
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+    environment:
+      - SERVICE_PRECONDITION=namenode:9870
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+      - HDFS_DATANODE_OPTS=-Ddfs.datanode.hostname=datanode -Ddfs.datanode.address=0.0.0.0:9866 -Ddfs.datanode.http.address=0.0.0.0:9864
+    ports:
+      - "9864:9864"
+    networks:
+      - hadoop
+
+  resourcemanager:
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+    container_name: resourcemanager
+    hostname: resourcemanager
+    depends_on:
+      - namenode
+      - datanode
+    environment:
+      - SERVICE_PRECONDITION=namenode:9870 datanode:9864
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+      - YARN_CONF_yarn_resourcemanager_address=resourcemanager:8032
+      - YARN_CONF_yarn_resourcemanager_scheduler_address=resourcemanager:8030
+    ports:
+      - "8088:8088"
+    networks:
+      - hadoop
+
+  nodemanager:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: nodemanager
+    hostname: nodemanager
+    depends_on:
+      - namenode
+      - datanode
+      - resourcemanager
+    environment:
+      - SERVICE_PRECONDITION=namenode:9870 datanode:9864 resourcemanager:8088
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+      - YARN_CONF_yarn_nodemanager_local_dirs=/hadoop/yarn/local
+      - YARN_CONF_yarn_nodemanager_log_dirs=/hadoop/yarn/log
+      - YARN_CONF_yarn_nodemanager_remote_app_log_dir=/app-logs
+      - YARN_CONF_yarn_nodemanager_resource_memory_mb=2048
+      - YARN_CONF_yarn_log_aggregation_enable=true
+      - YARN_CONF_yarn_resourcemanager_address=resourcemanager:8032
+      - YARN_CONF_yarn_resourcemanager_scheduler_address=resourcemanager:8030
+    ports:
+      - "8042:8042"
+    networks:
+      - hadoop
+
+  pig-client:
+    container_name: pig-client
+    hostname: pig-client
+    build: .
+    volumes:
+      - ./data:/data
+    depends_on:
+      - namenode
+      - datanode
+      - resourcemanager
+      - nodemanager
+    networks:
+      - hadoop
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+    stdin_open: true
+    tty: true
+    command: tail -f /dev/null
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode:
+
+networks:
+  hadoop:
+
